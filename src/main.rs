@@ -2,7 +2,7 @@
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 use core::mem::size_of;
-use std::io;
+use std::{io, ops::Mul};
 
 fn print_bits<T: std::fmt::Binary>(x: T) {
     let mut buf = [0u8; 64];
@@ -42,16 +42,30 @@ unsafe fn storeu<T>(src: T, dst: *mut i8) {
     std::ptr::write_unaligned(dst, src);
 }
 
-unsafe fn vec(chars: &[i64; 8]) -> __m512i {
+trait AsI64 {
+    fn cast(self) -> i64;
+}
+impl AsI64 for i64 {
+    fn cast(self) -> i64 {
+        self
+    }
+}
+impl AsI64 for char {
+    fn cast(self) -> i64 {
+        self as i64
+    }
+}
+
+unsafe fn vec<T: AsI64 + Copy>(chars: &[T; 8]) -> __m512i {
     _mm512_set_epi64(
-        chars[7] * 0x1010101_01010101,
-        chars[6] * 0x1010101_01010101,
-        chars[5] * 0x1010101_01010101,
-        chars[4] * 0x1010101_01010101,
-        chars[3] * 0x1010101_01010101,
-        chars[2] * 0x1010101_01010101,
-        chars[1] * 0x1010101_01010101,
-        chars[0] * 0x1010101_01010101,
+        (chars[7].cast() * 0x1010101_01010101i64) as i64,
+        (chars[6].cast() * 0x1010101_01010101i64) as i64,
+        (chars[5].cast() * 0x1010101_01010101i64) as i64,
+        (chars[4].cast() * 0x1010101_01010101i64) as i64,
+        (chars[3].cast() * 0x1010101_01010101i64) as i64,
+        (chars[2].cast() * 0x1010101_01010101i64) as i64,
+        (chars[1].cast() * 0x1010101_01010101i64) as i64,
+        (chars[0].cast() * 0x1010101_01010101i64) as i64,
     )
 }
 
@@ -71,13 +85,7 @@ unsafe fn b64_decode_impl(mut f: *const i8, l: *const i8, mut dit: *mut i8) {
         let xs = _mm512_set1_epi64(loadu(f));
         debug_only!(print!("xs: "); print_bytes(xs));
 
-        let sub = _mm512_sub_epi8(
-            xs,
-            vec(&[
-                'A' as i64, 'a' as i64, '0' as i64, '+' as i64, '/' as i64, '-' as i64, '_' as i64,
-                '=' as i64,
-            ]),
-        );
+        let sub = _mm512_sub_epi8(xs, vec(&['A', 'a', '0', '+', '/', '-', '_', '=']));
         debug_only!(print!("sub: "); print_bytes(sub));
 
         let lt = _mm512_cmplt_epu8_mask(sub, vec(&[26, 26, 10, 1, 1, 1, 1, 1]));
